@@ -1,0 +1,335 @@
+----SRC----
+
+--// RAYFIELD
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "THANA HUB | ULTIMATE",
+    LoadingTitle = "กำลังเริ่มระบบ...",
+    LoadingSubtitle = "By THANA",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "THANA HUB",
+        FileName = "Config"
+    },
+    ToggleUIKeybind = Enum.KeyCode.LeftControl,
+    KeybindText = "Keybind Menu"
+})
+
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+--// VARIABLES
+local aimEnabled, rainbowAim = false, false
+local aimFOV, aimSmooth = 150, 0.1
+local fovColor = Color3.fromRGB(255,255,255)
+local aimCircleColor = fovColor
+local hueAim = 0
+
+local espEnabled, rainbowESP = false, false
+local espColor = Color3.fromRGB(255,0,0)
+local espSizeMult = 1
+local hueESP = 0
+
+-- Fly
+local flyEnabled = false
+local flySpeed = 100
+local flyKeys = {W=false,A=false,S=false,D=false,Q=false,E=false}
+local flyConn
+
+local infJump = false
+local noclipEnabled = false
+local selectedPlayerName = ""
+
+--// DRAWING
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 2
+FOVCircle.Filled = false
+FOVCircle.Visible = false
+
+local espObjects = {}
+
+local function createESP(plr)
+    if espObjects[plr] then return end
+    local box = Drawing.new("Square")
+    box.Thickness = 2
+    box.Filled = false
+
+    local text = Drawing.new("Text")
+    text.Size = 18
+    text.Center = true
+    text.Outline = true
+
+    espObjects[plr] = {Box = box, Text = text}
+end
+
+local function removeESP(plr)
+    if espObjects[plr] then
+        espObjects[plr].Box:Remove()
+        espObjects[plr].Text:Remove()
+        espObjects[plr] = nil
+    end
+end
+
+--// FLY SYSTEM (FIXED)
+local function startFly()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:WaitForChild("HumanoidRootPart")
+    local hum = char:WaitForChild("Humanoid")
+
+    hum.PlatformStand = true
+
+    local bv = Instance.new("BodyVelocity", hrp)
+    bv.Name = "FlyBV"
+    bv.MaxForce = Vector3.new(1e9,1e9,1e9)
+
+    local bg = Instance.new("BodyGyro", hrp)
+    bg.Name = "FlyBG"
+    bg.MaxTorque = Vector3.new(1e9,1e9,1e9)
+    bg.P = 9e4
+
+    flyConn = RunService.RenderStepped:Connect(function()
+        local dir = Vector3.zero
+        if flyKeys.W then dir += Camera.CFrame.LookVector end
+        if flyKeys.S then dir -= Camera.CFrame.LookVector end
+        if flyKeys.A then dir -= Camera.CFrame.RightVector end
+        if flyKeys.D then dir += Camera.CFrame.RightVector end
+        if flyKeys.E then dir += Vector3.new(0,1,0) end
+        if flyKeys.Q then dir -= Vector3.new(0,1,0) end
+
+        if dir.Magnitude > 0 then
+            dir = dir.Unit * flySpeed
+        end
+
+        bv.Velocity = dir
+        bg.CFrame = Camera.CFrame
+    end)
+end
+
+local function stopFly()
+    if flyConn then flyConn:Disconnect() flyConn = nil end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then hum.PlatformStand = false end
+    if hrp then
+        if hrp:FindFirstChild("FlyBV") then hrp.FlyBV:Destroy() end
+        if hrp:FindFirstChild("FlyBG") then hrp.FlyBG:Destroy() end
+    end
+end
+
+-- Input Fly
+UIS.InputBegan:Connect(function(i,g)
+    if g then return end
+    if flyKeys[i.KeyCode.Name] ~= nil then flyKeys[i.KeyCode.Name] = true end
+end)
+UIS.InputEnded:Connect(function(i)
+    if flyKeys[i.KeyCode.Name] ~= nil then flyKeys[i.KeyCode.Name] = false end
+end)
+
+--// TABS
+local CombatTab = Window:CreateTab("🎯 Combat", 4483362458)
+local VisualTab = Window:CreateTab("👁️ Visuals", 4483362458)
+local MoveTab   = Window:CreateTab("⚡ Movement", 4483362458)
+local TPTab     = Window:CreateTab("📍 Teleport", 4483362458)
+
+--// COMBAT
+CombatTab:CreateToggle({Name="Aimbot",Callback=function(v) aimEnabled=v end})
+CombatTab:CreateSlider({Name="FOV",Range={50,500},Increment=1,CurrentValue=aimFOV,Callback=function(v) aimFOV=v end})
+CombatTab:CreateSlider({Name="Smoothness",Range={0.01,1},Increment=0.01,CurrentValue=aimSmooth,Callback=function(v) aimSmooth=v end})
+CombatTab:CreateColorPicker({Name="FOV Color",Color=fovColor,Callback=function(v) fovColor=v end})
+CombatTab:CreateToggle({Name="Rainbow FOV",Callback=function(v) rainbowAim=v end})
+
+--// VISUAL
+VisualTab:CreateToggle({Name="ESP",Callback=function(v) espEnabled=v end})
+VisualTab:CreateColorPicker({Name="ESP Color",Color=espColor,Callback=function(v) espColor=v end})
+VisualTab:CreateToggle({Name="Rainbow ESP",Callback=function(v) rainbowESP=v end})
+VisualTab:CreateSlider({
+    Name="ESP Size",
+    Range={0.5,3},
+    Increment=0.1,
+    CurrentValue=espSizeMult,
+    Callback=function(v) espSizeMult=v end
+})
+
+--// MOVEMENT
+MoveTab:CreateToggle({
+    Name="Fly",
+    Callback=function(v)
+        flyEnabled=v
+        if v then startFly() else stopFly() end
+    end
+})
+MoveTab:CreateSlider({Name="Fly Speed",Range={10,500},Increment=5,CurrentValue=flySpeed,Callback=function(v) flySpeed=v end})
+MoveTab:CreateToggle({Name="Noclip",Callback=function(v) noclipEnabled=v end})
+MoveTab:CreateToggle({Name="Inf Jump",Callback=function(v) infJump=v end})
+
+--// TELEPORT
+local pDropdown = TPTab:CreateDropdown({
+    Name="Select Player",
+    Options={},
+    CurrentOption={""},
+    Callback=function(v) selectedPlayerName=v[1] end
+})
+
+TPTab:CreateButton({
+    Name="Refresh",
+    Callback=function()
+        local list={}
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer then table.insert(list,p.Name) end
+        end
+        pDropdown:Refresh(list,true)
+    end
+})
+
+TPTab:CreateButton({
+    Name="Teleport",
+    Callback=function()
+        local t=Players:FindFirstChild(selectedPlayerName)
+        if t and t.Character and t.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame=t.Character.HumanoidRootPart.CFrame
+        end
+    end
+})
+
+--// MAIN LOOP
+RunService.RenderStepped:Connect(function(dt)
+    -- Rainbow
+    if rainbowAim then
+        hueAim=(hueAim+dt*0.2)%1
+        aimCircleColor=Color3.fromHSV(hueAim,0.8,1)
+    else
+        aimCircleColor=fovColor
+    end
+    if rainbowESP then
+        hueESP=(hueESP+dt*0.2)%1
+        espColor=Color3.fromHSV(hueESP,0.8,1)
+    end
+
+    -- FOV
+    FOVCircle.Visible=aimEnabled
+    FOVCircle.Radius=aimFOV
+    FOVCircle.Position=Camera.ViewportSize/2
+    FOVCircle.Color=aimCircleColor
+
+    -- AIMBOT
+    if aimEnabled then
+        local target,closest=nil,aimFOV
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character.Humanoid.Health>0 then
+                local pos,vis=Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+                if vis then
+                    local mag=(Vector2.new(pos.X,pos.Y)-(Camera.ViewportSize/2)).Magnitude
+                    if mag<closest then
+                        closest=mag
+                        target=p.Character.HumanoidRootPart
+                    end
+                end
+            end
+        end
+        if target then
+            Camera.CFrame=Camera.CFrame:Lerp(
+                CFrame.lookAt(Camera.CFrame.Position,target.Position),
+                aimSmooth
+            )
+        end
+    end
+
+    -- ESP
+    if espEnabled then
+        for _,p in ipairs(Players:GetPlayers()) do
+            if p~=LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character.Humanoid.Health>0 then
+                createESP(p)
+                local pos,vis=Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+                if vis then
+                    local size=Vector2.new((2500/pos.Z)*espSizeMult,(3500/pos.Z)*espSizeMult)
+                    local o=espObjects[p]
+                    o.Box.Size=size
+                    o.Box.Position=Vector2.new(pos.X-size.X/2,pos.Y-size.Y/2)
+                    o.Box.Color=espColor
+                    o.Box.Visible=true
+                    o.Text.Text=p.Name
+                    o.Text.Position=Vector2.new(pos.X,pos.Y-size.Y/2-20)
+                    o.Text.Color=espColor
+                    o.Text.Visible=true
+                else
+                    espObjects[p].Box.Visible=false
+                    espObjects[p].Text.Visible=false
+                end
+            else
+                removeESP(p)
+            end
+        end
+    else
+        for p,_ in pairs(espObjects) do removeESP(p) end
+    end
+
+    -- Noclip
+    if noclipEnabled and LocalPlayer.Character then
+        for _,v in pairs(LocalPlayer.Character:GetDescendants()) do
+            if v:IsA("BasePart") then v.CanCollide=false end
+        end
+    end
+end)
+
+-- INF JUMP
+UIS.InputBegan:Connect(function(i,g)
+    if not g and infJump and i.KeyCode==Enum.KeyCode.Space then
+        LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
+--// SCRIPT TAB
+local ScriptTab = Window:CreateTab("เพิ่มเติม ✳", 4483362458)
+
+    ScriptTab:CreateButton({
+    Name = "มองคน",
+    Callback = function()
+        loadstring(game:HttpGet("https://pastebin.com/raw/NNPz526f"))()
+    end
+    
+	
+})	
+	ScriptTab:CreateButton({
+    Name = "GOODMODE",
+    Callback = function()
+        loadstring(game:HttpGet("https://pastebin.com/raw/TsQqmQKE"))()
+    end
+
+})
+	ScriptTab:CreateButton({
+    Name = "TP V2",
+    Callback = function()
+        loadstring(game:HttpGet("https://pastebin.com/raw/a1DN8BdD"))()
+    end
+
+})
+
+   	ScriptTab:CreateButton({
+    Name = "รอ",
+    Callback = function()
+        loadstring(game:HttpGet(""))()
+    end
+
+})
+
+   	ScriptTab:CreateButton({
+    Name = "รอ2",
+    Callback = function()
+        loadstring(game:HttpGet(""))()
+    end
+
+})
+
+Rayfield:Notify({
+    Title="THANA HUB",
+    Content="67",
+    Duration=6
+})
