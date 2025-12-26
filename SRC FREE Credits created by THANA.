@@ -1,5 +1,6 @@
 ----SRC----
-----24/12/2568----
+----26/12/2568----
+
 
 --// RAYFIELD
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
@@ -293,7 +294,7 @@ local ScriptTab = Window:CreateTab("เพิ่มเติม ✳", 4483362458
     ScriptTab:CreateButton({
     Name = "มองคน",
     Callback = function()
-        loadstring(game:HttpGet("https://pastebin.com/raw/NNPz526f"))()
+        loadstring(game:HttpGet("https://pastebin.com/raw/vy6Mm4zM"))()
     end
     
 	
